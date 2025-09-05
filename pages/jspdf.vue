@@ -102,9 +102,32 @@ import { ref } from 'vue';
 const isLoading = ref(false);
 const currentSample = ref('single');
 
+// helper: convert external image URL to dataURL (base64)
+const fetchImageAsDataUrl = async (url) => {
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (!res.ok) throw new Error('Image fetch failed: ' + res.status);
+    const blob = await res.blob();
+    return await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = () => reject(new Error('Failed to read blob as dataURL'));
+      reader.onloadend = () => resolve(reader.result);
+      reader.readAsDataURL(blob);
+    });
+  } catch (err) {
+    console.warn('Could not fetch image for PDF header:', err);
+    return null;
+  }
+};
+
+const HOTEL_IMAGE_URL = 'https://cdn.worldota.net/t/1024x768/extranet/b5/d3/b5d3d33394494c68321246882c1bd93a6832dcd5.jpeg';
+
 const handleDownloadPdf = async () => {
   isLoading.value = true;
   try {
+    // load image (may return null on failure)
+    const hotelImageDataUrl = await fetchImageAsDataUrl(HOTEL_IMAGE_URL);
+
     const { jsPDF } = await import('jspdf');
     await new Promise(resolve => setTimeout(resolve, 50)); // small UX pause
 
@@ -171,13 +194,32 @@ const handleDownloadPdf = async () => {
       doc.setFontSize(18);
       doc.text(bookingData.hotelName, LEFT_MARGIN + 2, y + 32);
 
-      // Hotel image placeholder on right
+      // Hotel image (if available) on right; otherwise draw white placeholder
       const imgX = PAGE_WIDTH - RIGHT_MARGIN - 36;
-      doc.setFillColor(WHITE);
-      doc.rect(imgX, y + 2, 36, 36, 'F');
-      doc.setDrawColor(BORDER_COLOR);
-      doc.setLineWidth(0.5);
-      doc.rect(imgX, y + 2, 36, 36);
+      const imgY = y + 2;
+      const imgW = 36;
+      const imgH = 36;
+
+      if (hotelImageDataUrl) {
+        try {
+          // jsPDF expects jpg/png/svg data URL; FileReader produced the correct dataURL
+          // detect MIME type for addImage 'format' param (optional). jsPDF can handle dataURL directly w/o format.
+          doc.addImage(hotelImageDataUrl, imgX, imgY, imgW, imgH);
+        } catch (err) {
+          // fallback to white rectangle if addImage fails
+          doc.setFillColor(WHITE);
+          doc.rect(imgX, imgY, imgW, imgH, 'F');
+          doc.setDrawColor(BORDER_COLOR);
+          doc.setLineWidth(0.5);
+          doc.rect(imgX, imgY, imgW, imgH);
+        }
+      } else {
+        doc.setFillColor(WHITE);
+        doc.rect(imgX, imgY, imgW, imgH, 'F');
+        doc.setDrawColor(BORDER_COLOR);
+        doc.setLineWidth(0.5);
+        doc.rect(imgX, imgY, imgW, imgH);
+      }
 
       y += 50;
     };
@@ -322,9 +364,6 @@ const handleDownloadPdf = async () => {
       for (let i = 0; i < travelers.length; i++) {
         // before each row, check page break
         if (y + TABLE_ROW_HEIGHT > PAGE_HEIGHT - BOTTOM_MARGIN) {
-          doc.setDrawColor(BORDER_COLOR);
-          // draw table outer border up to current y
-          // add page and redraw header
           doc.addPage();
           currentPage++;
           y = TOP_MARGIN;

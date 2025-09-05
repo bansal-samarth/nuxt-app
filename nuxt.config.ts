@@ -5,15 +5,17 @@ export default defineNuxtConfig({
   compatibilityDate: '2025-05-15',
   devtools: { enabled: true },
 
-  modules: ['nuxt-posthog', '@nuxtjs/tailwindcss', '@nuxthub/core', 'nuxt-gtag'],
-
-  gtag: {
-    id: 'GTM-T947JWMX'
+  // Ensure PDFme works client-side
+  build: {
+    transpile: ['@pdfme/generator', '@pdfme/common']
   },
   
-  posthog: {
-    capturePageViews: true,
-    capturePageLeaves: true,
-    proxy: false
+  // Optional: Add build optimizations for PDFme
+  vite: {
+    optimizeDeps: {
+      include: ['@pdfme/generator', '@pdfme/common']
+    }
   },
+
+  modules: ['@nuxtjs/tailwindcss', '@nuxthub/core'],
 })
